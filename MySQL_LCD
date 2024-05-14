@@ -1,0 +1,154 @@
+ * ioTechProjects.com 2022
+ * 
+ * ESP8266 to MySQL tutorial
+ * 
+ * u are free to edit this code
+ */
+ 
+#include <LiquidCrystal_I2C.h>
+#include <MySQL_Generic.h>
+#include <Wire.h>
+
+// Lcd adress
+LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x3F, 16, 2);
+
+// Database Adress
+IPAddress server_addr(86, 85, 233, 156);
+uint16_t server_port = PORT;
+
+// Network Info
+char ssid[] = "WIFI_SSID";
+char pass[] = "WIFI_PASSWORD";
+
+// Database Account
+char user[]         = "theiotprojects";
+char password[]     = "theiotprojects.com";
+
+//Database Name
+char database[] = "nodemcu_rfid_iot_projects";
+char table[]    = "table_the_iot_projects";
+
+// Query
+String query = String("SELECT name,id,gender,email,mobile FROM ") + database + "." + table + (" ORDER BY id DESC LIMIT 1;");
+
+// Default values
+String datetime = "";
+double temp = 0;
+double humidity = 0;
+double pressure = 0;
+
+
+// Create an instance of the cursor passing in the connection
+MySQL_Connection conn((Client *)&client);
+MySQL_Query sql_query = MySQL_Query(&conn);
+
+void setup()
+{
+  Serial.begin(115200);
+  lcd.init();
+  lcd.backlight();
+
+  // Begin WiFi section
+  Serial.println(String("Connecting to ") + ssid);
+  WiFi.begin(ssid, pass);
+
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+  }
+
+  // print out info about the connection:
+  Serial.print("Connected to network. My IP address is: ");
+  Serial.println(WiFi.localIP());
+
+  //Serial.println("Connecting...");
+  Serial.print("Connecting to SQL Server @ ");
+  Serial.print(server_addr);
+  Serial.println(String(", Port = ") + server_port);
+  Serial.println(String("User = ") + user + String(", PW = ") + password + String(", DB = ") + database);
+}
+
+
+void loop()
+{
+  // Sending query
+  Serial.println("Connecting...");
+  if (conn.connectNonBlocking(server_addr, server_port, user, password) != RESULT_FAIL)
+  {
+    row_values *row = NULL;
+    String Pdatetime = "";
+    float Ptemperature = 0;
+    float Phumidity = 0;
+    float Ppressure = 0;
+
+    // Initiate the query class instance
+    MySQL_Query query_mem = MySQL_Query(&conn);
+
+    // Print the query
+    Serial.println(query);
+
+    // Execute the query
+    // KH, check if valid before fetching
+    if ( !query_mem.execute(query.c_str()) )
+    {
+      Serial.println("Querying error");
+      return;
+    }
+
+    // Fetch the columns (required) but we don't use them.
+    column_names *columns = query_mem.get_columns();
+
+    // Read the row (we are only expecting the one)
+    do
+    {
+      row = query_mem.get_next_row();
+
+      if (row != NULL)
+      {
+        Pdatetime = row->values[0];
+        Ptemperature = atof(row->values[1]);
+        Phumidity = atof(row->values[2]);
+        Ppressure = atof(row->values[3]);
+      }
+    } while (row != NULL);
+
+    // Export
+    datetime = Pdatetime;
+    temperature = Ptemperature;
+    humidity = Phumidity;
+    pressure = Ppressure;
+    delay(500);
+
+    // Now we close the connection to free any memory
+    sql_query.close();
+    conn.close();            
+  }
+  else
+  {
+    Serial.println("\nConnect failed. Trying again on next iteration.");
+  }
+
+  // Showing results in serial
+  Serial.println("Values:");
+  Serial.println("Datetime: " + datetime);
+  Serial.println("temperature: " + String(temperature));
+  Serial.println("humidity: " + String(humidity));
+  Serial.println("pressure: " + String(pressure));
+
+  // Showing results on lcd
+  lcd.setCursor(0, 0);
+  lcd.print(datetime);
+  lcd.setCursor(0, 1);
+  lcd.print("Temp: " + String(temperature) + " " + (char)223 + "C     ");
+  delay(3000);
+  lcd.setCursor(0, 1);
+  lcd.print("Humi: " + String(humidity) + " %     ");
+  delay(3000);
+  lcd.setCursor(0, 1);
+  lcd.print("Pres: " + String(pressure) + " hPa     ");
+
+  Serial.println("\nSleeping...");
+  Serial.println("================================================");
+  delay(1500);
+}
